@@ -34,7 +34,7 @@ import "experimental/http/requests"
 // ## Examples
 // ### Query specific fields in a measurement from InfluxDB
 // ```no_run
-// import "experimental/query"
+// import "contrib/qxip/logql"
 //
 // logql.query_range(
 //     url: "http://qryn:3100",
