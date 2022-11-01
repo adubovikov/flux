@@ -8,7 +8,6 @@
 package logql
 
 import "csv"
-import "date"
 import "experimental"
 import "experimental/http/requests"
 
