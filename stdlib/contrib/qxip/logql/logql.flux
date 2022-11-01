@@ -48,7 +48,7 @@ import "experimental/http/requests"
 // tags: inputs
 //
 query_range = (
-	url="http://127.0.0.1:3100",
+    url="http://127.0.0.1:3100",
     query,
     limit=100,
     start,
@@ -57,6 +57,5 @@ query_range = (
     response = requests.get(
       url: url + "/loki/api/v1/query_range?query=" + query + "&limit=" + limit + "&start=" + start + "&end=" +end + "&step=0&csv=1",
       body: bytes(v: query)
-	  )
-
-	  csv.from(csv: string(v: response.body), mode: "raw")
+    )
+    csv.from(csv: string(v: response.body), mode: "raw")
