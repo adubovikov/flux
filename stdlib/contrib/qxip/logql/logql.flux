@@ -15,7 +15,7 @@ import "experimental/http/requests"
 // filters data by query, timerange, and optional limit expressions.
 //
 // ## Parameters
-// - url: InfluxDB bucket name.
+// - url: LogQL/qryn API.
 // - limit: Query limit.
 // - query: LogQL query to execute.
 // - start: Earliest time to include in results.
@@ -32,7 +32,7 @@ import "experimental/http/requests"
 //   Durations are relative to `now()`.
 //
 // ## Examples
-// ### Query specific fields in a measurement from InfluxDB
+// ### Query specific fields in a measurement from LogQL/qryn
 // ```no_run
 // import "contrib/qxip/logql"
 //
