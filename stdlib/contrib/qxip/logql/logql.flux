@@ -18,7 +18,7 @@ import "experimental/http/requests"
 // - url: LogQL/qryn API.
 // - limit: Query limit.
 // - query: LogQL query to execute.
-// - start: Earliest time to include in results.
+// - start: Earliest time to include in results. Default is `-1h`.
 //
 //   Results include points that match the specified start time.
 //   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
@@ -57,7 +57,7 @@ query_range = (
     stop=uint(v: now() ),
 ) =>
     response = requests.get(
-      url: url + "/loki/api/v1/query_range?query=" + query + "&limit=" + limit + "&start=" + start + "&end=" +end + "&step=0&csv=1",
+      url: url + "/loki/api/v1/query_range?query=" + query + "&limit=" + limit + "&start=" + start + "&end=" + stop + "&step=0&csv=1",
       body: bytes(v: query)
     )
     csv.from(csv: string(v: response.body), mode: "raw")
