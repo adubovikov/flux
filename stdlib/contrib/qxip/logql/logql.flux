@@ -21,15 +21,16 @@ import "experimental/http/requests"
 // - start: Earliest time to include in results.
 //
 //   Results include points that match the specified start time.
-//   Use a relative duration, absolute time, or integer (Unix timestamp in seconds).
-//   For example, `-1h`, `2019-08-28T22:00:00Z`, or `1567029600`.
-//   Durations are relative to `now()`.
+//   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
+//   For example, `-1h`, `2019-08-28T22:00:00.801064Z`, or `1545136086801064`.
+//   Timestamps are expressed as `uint()`. For example: `uint(v: -1h  )`
 //
 // - stop: Latest time to include in results. Default is `now()`.
 //
 //   Results exclude points that match the specified stop time.
-//   Use a relative duration, absolute time, or integer (Unix timestamp in seconds).For example, `-1h`, `2019-08-28T22:00:00Z`, or `1567029600`.
-//   Durations are relative to `now()`.
+//   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
+//   For example, `now()`, `2019-08-28T22:00:00.801064Z`, or `1545136086801064`.
+//   Timestamps are expressed as `uint()`. For example: `uint(v: now()  )`
 //
 // ## Examples
 // ### Query specific fields in a measurement from LogQL/qryn
