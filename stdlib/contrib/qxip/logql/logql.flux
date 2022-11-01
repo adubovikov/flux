@@ -8,6 +8,7 @@
 package logql
 
 import "csv"
+import "date"
 import "experimental"
 import "experimental/http/requests"
 
@@ -38,9 +39,10 @@ import "experimental/http/requests"
 //
 // logql.query_range(
 //     url: "http://qryn:3100",
-//     start: -1h,
-//     stop: now(),
+//     start: uint(v: -1h  ),
+//     stop: uint(v: now() ),
 //     query: "{\"job\"=\"dummy-server\"}",
+//     limit: 100, 
 // )
 // ```
 //
@@ -51,8 +53,8 @@ query_range = (
     url="http://127.0.0.1:3100",
     query,
     limit=100,
-    start,
-    stop=now(),
+    start=uint(v: -1h ),
+    stop=uint(v: now() ),
 ) =>
     response = requests.get(
       url: url + "/loki/api/v1/query_range?query=" + query + "&limit=" + limit + "&start=" + start + "&end=" +end + "&step=0&csv=1",
