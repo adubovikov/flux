@@ -25,7 +25,7 @@ import "experimental/http/requests"
 //   For example, `-1h`, `2019-08-28T22:00:00.801064Z`, or `1545136086801064`.
 //   Timestamps are expressed as `uint()`. For example: `uint(v: -1h  )`
 //
-// - stop: Latest time to include in results. Default is `now()`.
+// - end: Latest time to include in results. Default is `now()`.
 //
 //   Results exclude points that match the specified stop time.
 //   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
@@ -39,10 +39,12 @@ import "experimental/http/requests"
 //
 // logql.query_range(
 //     url: "http://qryn:3100",
+//     path: "/loki/api/v1/query_range",
 //     start: uint(v: -1h  ),
-//     stop: uint(v: now() ),
+//     end: uint(v: now() ),
 //     query: "{\"job\"=\"dummy-server\"}",
-//     limit: 100, 
+//     limit: 100,
+//     orgid: "customer001",
 // )
 // ```
 //
@@ -51,13 +53,17 @@ import "experimental/http/requests"
 //
 query_range = (
     url="http://127.0.0.1:3100",
-    query,
+    path="/loki/api/v1/query_range",
+    query="",
     limit=100,
     start=uint(v: -1h ),
-    stop=uint(v: now() ),
+    end=uint(v: now() ),
+    orgid="",
 ) =>
     response = requests.get(
-      url: url + "/loki/api/v1/query_range?query=" + query + "&limit=" + limit + "&start=" + start + "&end=" + stop + "&step=0&csv=1",
+      url: url + path,
+      params: ["query": [query], "limit": [limit], "start": [start], "end": [end], "step": [0], "csv": [1]],
+      headers: if orgid != "" then ["X-Scope-OrgID": [orgid]] else [],
       body: bytes(v: query)
     )
     csv.from(csv: string(v: response.body), mode: "raw")
