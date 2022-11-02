@@ -4,7 +4,7 @@ Use this package to interact with LogQL APIs.
 
 ## logql.query_range
 
-`logql.query_range` executes a query against a LogQL API such as qryn. 
+`logql.query_range` executes a range query against a LogQL API _(such as qryn)_. 
 
 Parameters:
 
