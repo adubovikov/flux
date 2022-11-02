@@ -17,7 +17,7 @@ import "experimental/http/requests"
 //
 // ## Parameters
 // - url: LogQL/qryn API.
-// - limit: Query limit.
+// - limit: Query limit. Default is 100.
 // - query: LogQL query to execute.
 // - start: Earliest time to include in results. Default is `-1h`.
 //
@@ -31,6 +31,9 @@ import "experimental/http/requests"
 //   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
 //   For example, `now()`, `2019-08-28T22:00:00.801064Z`, or `1545136086801064`.
 //
+// - step: Query stepping. Default is 10.
+// - orgid: Optional Organization Id for partitioning.
+//
 // ## Examples
 // ### Query specific fields in a measurement from LogQL/qryn
 // ```no_run
@@ -41,9 +44,8 @@ import "experimental/http/requests"
 //     path: "/loki/api/v1/query_range",
 //     start: -1h,
 //     end: now(),
-//     query: "{\"job\"=\"dummy-server\"}",
+//     query: "{job=\"dummy-server\"}",
 //     limit: "100",
-//     orgid: "ABC123",
 // )
 // ```
 //
