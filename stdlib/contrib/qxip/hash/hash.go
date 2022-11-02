@@ -11,7 +11,7 @@ import (
 var hashFuncName = "hash"
 
 func init() {
-	SpecialFns = map[string]values.Function{
+  SpecialFns = map[string]values.Function{
      "test": values.NewFunction(
         "test",
         runtime.MustLookupBuiltinType("hash", "test"),
@@ -28,7 +28,7 @@ func init() {
           return nil, errors.Newf(codes.Invalid, "cannot hash value %v", v)
         },
         false,
-      )
+     )
   }
   
   runtime.RegisterPackageValue("hash", "test", SpecialFns["test"])
