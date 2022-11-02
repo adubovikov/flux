@@ -8,6 +8,7 @@
 package logql
 
 import "csv"
+import "date"
 import "experimental"
 import "experimental/http/requests"
 
@@ -41,7 +42,7 @@ import "experimental/http/requests"
 //     start: -1h,
 //     end: now(),
 //     query: "{\"job\"=\"dummy-server\"}",
-//     limit: 100,
+//     limit: "100",
 //     orgid: "ABC123",
 // )
 // ```
@@ -54,15 +55,18 @@ query_range = (
     path="/loki/api/v1/query_range",
     query="",
     limit="100",
+    step="10",
     start=-1h,
     end=now(),
     orgid="",
 ) =>
    {
+    dstart = date.sub(from: start, d: 0d)
+    dend = date.sub(from: end, d: 0d)
     response = requests.get(
       url: url + path,
-      params: ["query": [query], "limit": [limit], "start": [string(v: uint(v: start))], "end": [string(v: uint(v: end))], "step": ["0"], "csv": ["1"]],
-      headers: if orgid != "" then ["X-Scope-OrgID": orgid] else ["X-Scope-OrgID":"0"],
+      params: ["query": [query], "limit": [limit], "start": [string(v: uint(v: dstart))], "end": [string(v: uint(v: dend))], "step": [step], "csv": ["1"]],
+      headers: if orgid != "" then ["X-Scope-OrgID": orgid] else ["X-Scope-OrgID": "0"],
       body: bytes(v: query)
     )
     return csv.from(csv: string(v: response.body), mode: "raw")
