@@ -14,10 +14,10 @@ package hash
 // ```
 // import "hash"
 //
-// fingerprint = hash("something")
+// fingerprint = hash.test("something")
 // ```
 //
 // ## Metadata
 // tags: convert
 //
-builtin hash : (v: string) => string
+builtin test : (v: string) => string
