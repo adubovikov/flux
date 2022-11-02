@@ -23,14 +23,12 @@ import "experimental/http/requests"
 //   Results include points that match the specified start time.
 //   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
 //   For example, `-1h`, `2019-08-28T22:00:00.801064Z`, or `1545136086801064`.
-//   Timestamps are expressed as `uint()`. For example: `uint(v: -1h  )`
 //
 // - end: Latest time to include in results. Default is `now()`.
 //
 //   Results exclude points that match the specified stop time.
 //   Use a relative duration, absolute time, or integer (Unix timestamp in nanoseconds).
 //   For example, `now()`, `2019-08-28T22:00:00.801064Z`, or `1545136086801064`.
-//   Timestamps are expressed as `uint()`. For example: `uint(v: now()  )`
 //
 // ## Examples
 // ### Query specific fields in a measurement from LogQL/qryn
@@ -40,11 +38,11 @@ import "experimental/http/requests"
 // logql.query_range(
 //     url: "http://qryn:3100",
 //     path: "/loki/api/v1/query_range",
-//     start: uint(v: -1h  ),
-//     end: uint(v: now() ),
+//     start: -1h,
+//     end: now(),
 //     query: "{\"job\"=\"dummy-server\"}",
 //     limit: 100,
-//     orgid: "customer001",
+//     orgid: "ABC123",
 // )
 // ```
 //
@@ -56,15 +54,15 @@ query_range = (
     path="/loki/api/v1/query_range",
     query="",
     limit="100",
-    start=uint(v: -1h ),
-    end=uint(v: now() ),
+    start=-1h,
+    end=now(),
     orgid="",
 ) =>
    {
     response = requests.get(
       url: url + path,
-      params: ["query": [query], "limit": [limit], "start": [string(v:start)], "end": [string(v:end)], "step": ["0"], "csv": ["1"]],
-      headers: if orgid != "" then ["X-Scope-OrgID": orgid] else ["default":"null"],
+      params: ["query": [query], "limit": [limit], "start": [string(v: uint(v: start))], "end": [string(v: uint(v: end))], "step": ["0"], "csv": ["1"]],
+      headers: if orgid != "" then ["X-Scope-OrgID": orgid] else ["X-Scope-OrgID":"0"],
       body: bytes(v: query)
     )
     return csv.from(csv: string(v: response.body), mode: "raw")
