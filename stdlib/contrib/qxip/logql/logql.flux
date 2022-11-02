@@ -55,15 +55,17 @@ query_range = (
     url="http://127.0.0.1:3100",
     path="/loki/api/v1/query_range",
     query="",
-    limit=100,
+    limit="100",
     start=uint(v: -1h ),
     end=uint(v: now() ),
     orgid="",
 ) =>
+   {
     response = requests.get(
       url: url + path,
-      params: ["query": [query], "limit": [limit], "start": [start], "end": [end], "step": [0], "csv": [1]],
-      headers: if orgid != "" then ["X-Scope-OrgID": [orgid]] else [],
+      params: ["query": [query], "limit": [limit], "start": [string(v:start)], "end": [string(v:end)], "step": ["0"], "csv": ["1"]],
+      headers: if orgid != "" then ["X-Scope-OrgID": orgid] else ["default":"null"],
       body: bytes(v: query)
     )
-    csv.from(csv: string(v: response.body), mode: "raw")
+    return csv.from(csv: string(v: response.body), mode: "raw")
+   }
