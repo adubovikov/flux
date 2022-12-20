@@ -304,6 +304,20 @@ impl<'input> Parser<'input> {
         base.set_comments(comments_from.comments.clone());
         base
     }
+    fn base_node_from_other_end_c_a(
+        &mut self,
+        start: &Token,
+        end: &BaseNode,
+        comments_from: &Token,
+        attributes: Vec<Attribute>,
+    ) -> BaseNode {
+        let mut base = self.base_node(
+            self.source_location(&ast::Position::from(&start.start_pos), &end.location.end),
+        );
+        base.set_comments(comments_from.comments.clone());
+        base.attributes = attributes;
+        base
+    }
 
     fn base_node_from_others(&mut self, start: &BaseNode, end: &BaseNode) -> BaseNode {
         self.base_node_from_pos(&start.location.start, &end.location.end)
@@ -362,18 +376,33 @@ impl<'input> Parser<'input> {
         self.fname = fname;
         let start_pos = ast::Position::from(&self.peek().start_pos);
         let mut end = ast::Position::invalid();
-        let pkg = self.parse_package_clause();
+
+        // Parse inner attributes at the beginning of the file and hand them off to the first
+        // clause, declaration or statement that exists
+        let inner_attributes = self.parse_attribute_inner_list();
+
+        let (pkg, inner_attributes) = self.parse_package_clause(inner_attributes);
         if let Some(pkg) = &pkg {
             end = pkg.base.location.end;
         }
-        let imports = self.parse_import_list();
+        let (imports, inner_attributes) = self.parse_import_list(inner_attributes);
         if let Some(import) = imports.last() {
             end = import.base.location.end;
         }
-        let body = self.parse_statement_list();
+        let (mut body, inner_attributes) = self.parse_statement_list(inner_attributes);
+        if let Some(attrs) = inner_attributes {
+            if !attrs.is_empty() {
+                // We have left over attributes from the beginning of the file.
+                body.push(Statement::Bad(Box::new(BadStmt {
+                    base: self.base_node_from_others(&attrs[0].base, &attrs[attrs.len() - 1].base),
+                    text: "extra attributes not associated with anything".to_string(),
+                })));
+            }
+        }
         if let Some(stmt) = body.last() {
             end = stmt.base().location.end;
         }
+
         let eof = self.peek().comments.clone();
         File {
             base: BaseNode {
@@ -389,31 +418,55 @@ impl<'input> Parser<'input> {
         }
     }
 
-    fn parse_package_clause(&mut self) -> Option<PackageClause> {
+    fn parse_package_clause(
+        &mut self,
+        attributes: Vec<Attribute>,
+    ) -> (Option<PackageClause>, Option<Vec<Attribute>>) {
         let t = self.peek();
         if t.tok == TokenType::Package {
             let t = self.consume();
             let ident = self.parse_identifier();
-            return Some(PackageClause {
-                base: self.base_node_from_other_end_c(&t, &ident.base, &t),
-                name: ident,
-            });
+            let base = self.base_node_from_other_end_c_a(&t, &ident.base, &t, attributes);
+            return (Some(PackageClause { base, name: ident }), None);
         }
-        None
+        (None, Some(attributes))
     }
 
-    fn parse_import_list(&mut self) -> Vec<ImportDeclaration> {
+    fn parse_import_list(
+        &mut self,
+        attributes: Option<Vec<Attribute>>,
+    ) -> (Vec<ImportDeclaration>, Option<Vec<Attribute>>) {
         let mut imports: Vec<ImportDeclaration> = Vec::new();
+        let mut attrs = attributes;
         loop {
             let t = self.peek();
-            if t.tok != TokenType::Import {
-                return imports;
+            match t.tok {
+                TokenType::Attribute => {
+                    if attrs.is_some() {
+                        self.errs.push("found multiple attribute lists".to_string());
+                    }
+                    attrs = Some(self.parse_attribute_inner_list());
+                }
+                TokenType::Import => {
+                    imports.push(self.parse_import_declaration(attrs));
+                    attrs = None;
+                }
+                _ => {
+                    return (imports, attrs);
+                }
             }
-            imports.push(self.parse_import_declaration())
         }
     }
 
-    fn parse_import_declaration(&mut self) -> ImportDeclaration {
+    fn parse_import_declaration(
+        &mut self,
+        attributes: Option<Vec<Attribute>>,
+    ) -> ImportDeclaration {
+        let attrs = if let Some(attributes) = attributes {
+            attributes
+        } else {
+            self.parse_attribute_inner_list()
+        };
         let t = self.expect(TokenType::Import);
         let alias = if self.peek().tok == TokenType::Ident {
             Some(self.parse_identifier())
@@ -421,26 +474,28 @@ impl<'input> Parser<'input> {
             None
         };
         let path = self.parse_string_literal();
-        ImportDeclaration {
-            base: self.base_node_from_other_end_c(&t, &path.base, &t),
-            alias,
-            path,
-        }
+        let base = self.base_node_from_other_end_c_a(&t, &path.base, &t, attrs);
+        ImportDeclaration { base, alias, path }
     }
 
-    fn parse_statement_list(&mut self) -> Vec<Statement> {
+    fn parse_statement_list(
+        &mut self,
+        attributes: Option<Vec<Attribute>>,
+    ) -> (Vec<Statement>, Option<Vec<Attribute>>) {
         let mut stmts: Vec<Statement> = Vec::new();
+        let mut attrs = attributes;
         loop {
             if !self.more() {
-                return stmts;
+                return (stmts, attrs);
             }
-            stmts.push(self.parse_statement());
+            stmts.push(self.parse_statement(attrs));
+            attrs = None;
         }
     }
 
     /// Parses a flux statement
-    pub fn parse_statement(&mut self) -> Statement {
-        self.depth_guard(|this| this.parse_statement_inner())
+    pub fn parse_statement(&mut self, attributes: Option<Vec<Attribute>>) -> Statement {
+        self.depth_guard(|this| this.parse_statement_inner(attributes))
             .unwrap_or_else(|| {
                 let t = self.consume();
                 Statement::Bad(Box::new(BadStmt {
@@ -450,9 +505,15 @@ impl<'input> Parser<'input> {
             })
     }
 
-    fn parse_statement_inner(&mut self) -> Statement {
+    fn parse_statement_inner(&mut self, attributes: Option<Vec<Attribute>>) -> Statement {
+        let attributes = if let Some(attributes) = attributes {
+            attributes
+        } else {
+            self.parse_attribute_inner_list()
+        };
+
         let t = self.peek();
-        match t.tok {
+        let mut stmt = match t.tok {
             TokenType::Int
             | TokenType::Float
             | TokenType::String
@@ -481,7 +542,9 @@ impl<'input> Parser<'input> {
                     text: t.lit,
                 }))
             }
-        }
+        };
+        stmt.base_mut().attributes = attributes;
+        stmt
     }
     fn parse_option_assignment(&mut self) -> Statement {
         let t = self.expect(TokenType::Option);
@@ -915,7 +978,7 @@ impl<'input> Parser<'input> {
     }
     fn parse_block(&mut self) -> Block {
         let start = self.open(TokenType::LBrace, TokenType::RBrace);
-        let stmts = self.parse_statement_list();
+        let (stmts, _) = self.parse_statement_list(None);
         let end = self.close(TokenType::RBrace);
         Block {
             base: self.base_node_from_tokens(&start, &end),
@@ -2295,6 +2358,71 @@ impl<'input> Parser<'input> {
                 }))
             }
         }
+    }
+
+    fn parse_attribute_inner_list(&mut self) -> Vec<Attribute> {
+        let mut attributes = Vec::new();
+        while self.peek().tok == TokenType::Attribute {
+            attributes.push(self.parse_attribute_inner());
+        }
+        attributes
+    }
+
+    fn parse_attribute_inner(&mut self) -> Attribute {
+        let tok = self.expect(TokenType::Attribute);
+        let name = tok.lit.trim_start_matches('@').to_string();
+        self.parse_attribute_rest(tok, name)
+    }
+    fn parse_attribute_rest(&mut self, tok: Token, name: String) -> Attribute {
+        // Parenthesis are optional. No parenthesis means no parameters.
+        if self.peek().tok != TokenType::LParen {
+            return Attribute {
+                base: self.base_node_from_token(&tok),
+                name,
+                params: Vec::new(),
+            };
+        }
+
+        self.open(TokenType::LParen, TokenType::RParen);
+        let params = self.parse_attribute_params();
+        let end = self.close(TokenType::RParen);
+        let mut base = self.base_node_from_tokens(&tok, &end);
+        base.set_comments(tok.comments.clone());
+        Attribute { base, name, params }
+    }
+
+    fn parse_attribute_params(&mut self) -> Vec<AttributeParam> {
+        let mut params = Vec::new();
+        let mut errs = Vec::new();
+        while self.more() {
+            let value = self.parse_primary_expression();
+            let start_pos = value.base().location.start;
+            let mut end_pos = value.base().location.end;
+            let mut comments = Vec::new();
+
+            if self.more() {
+                let t = self.peek();
+                if t.tok != TokenType::Comma {
+                    errs.push(format!(
+                        "expected comma in attribute parameter list, got {}",
+                        t.tok
+                    ))
+                } else {
+                    let t = self.consume();
+                    end_pos = ast::Position::from(&t.end_pos);
+                    comments = t.comments;
+                }
+            }
+
+            let param = AttributeParam {
+                base: self.base_node_from_pos(&start_pos, &end_pos),
+                value,
+                comma: comments,
+            };
+            params.push(param);
+        }
+        self.errs.append(&mut errs);
+        params
     }
 }
 
