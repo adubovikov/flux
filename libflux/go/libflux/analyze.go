@@ -40,7 +40,8 @@ func SemanticPackages() (map[string]*semantic.Package, error) {
 			return nil, err
 		}
 
-		m[path.Dir(pkg.Files[0].File)] = &pkg
+		k := path.Dir(pkg.Files[0].File)
+		m[k] = &pkg
 	}
 
 	return m, nil
@@ -55,6 +56,7 @@ func NewOptions(ctx context.Context) Options {
 	features = addFlag(ctx, features, feature.PrettyError())
 	features = addFlag(ctx, features, feature.LabelPolymorphism())
 	features = addFlag(ctx, features, feature.UnusedSymbolWarnings())
+	features = addFlag(ctx, features, feature.SalsaDatabase())
 	return Options{Features: features}
 }
 
