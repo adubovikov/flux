@@ -295,6 +295,61 @@ fn str_lit2() {
 }
 
 #[test]
+fn package_attribute() {
+    assert_unchanged(
+        r#"@edition("2022.1")
+package foo
+"#,
+    );
+    assert_unchanged(
+        r#"// Package foo is documented here.
+@edition("2022.1")
+package foo
+"#,
+    );
+    assert_unchanged(
+        r#"// Documentation before attribute.
+@deprecated
+// My function is below this.
+identity = (x) => x"#,
+    );
+    assert_unchanged(
+        r#"@edition(
+    // Documented.
+    "2022.1",
+)
+package foo
+"#,
+    );
+    assert_unchanged(
+        r#"// Attributes on imports
+@edition("2022.1")
+import "foo""#,
+    );
+    assert_format("@edition package foo", "@edition\npackage foo\n");
+
+    // All the attributes
+    assert_unchanged(
+        r#"// Package comments
+@mount("fluxlang.dev", "https://fluxlang.dev/api/modules")
+@two
+@three
+@four
+package foo
+
+
+// Comments for import
+@registry("fluxlang.dev")
+@double
+import "date"
+
+// x is one
+@deprecated("0.123.0")
+x = 1"#,
+    );
+}
+
+#[test]
 fn package_import() {
     assert_unchanged(
         r#"package foo

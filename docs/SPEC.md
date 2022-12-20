@@ -102,7 +102,7 @@ The following character sequences represent operators:
     -   <    !~   [   ]   ^
     *   >    =~   {   }   ?
     /   <=   =    ,   :   "
-    %   >=   <-   .   |>
+    %   >=   <-   .   |>  @
 
 ##### Integer literals
 
@@ -1029,13 +1029,14 @@ Each source file is parsed individually and composed into a single package.
 
 #### Package clause
 
-    PackageClause = "package" identifier .
+    PackageClause = [ Attributes ] "package" identifier .
 
 A package clause defines the name for the current package.
 Package names must be valid Flux identifiers.
 The package clause must be at the begining of any Flux source file.
 All files in the same package must declare the same package name.
 When a file does not declare a package clause, all identifiers in that file will belong to the special _main_ package.
+
 
 
 ##### package main
@@ -1046,24 +1047,14 @@ The _main_ package is special for a few reasons:
 2. It cannot be imported
 3. All statements are marked as producing side effects
 
-### Statements
-
-A statement controls execution.
-
-    Statement = OptionAssignment
-              | BuiltinStatement
-              | VariableAssignment
-              | ReturnStatement
-              | ExpressionStatement .
-
-
 #### Import declaration
 
-    ImportDeclaration = "import" [identifier] string_lit
+    ImportDeclaration = [ Attributes ] "import" [identifier] string_lit
+
 
 Associated with every package is a package name and an import path.
 The import statement takes a package's import path and brings all of the identifiers defined in that package into the current scope under a namespace.
-The import statment defines the namespace through which to access the imported identifiers.
+The import statement defines the namespace through which to access the imported identifiers.
 By default the identifier of this namespace is the package name unless otherwise specified.
 For example, given a variable `x` declared in package `foo`, importing `foo` and referencing `x` would look like this:
 
@@ -1086,6 +1077,37 @@ A package may reassign a new value to an option identifier declared in one of it
 A package cannot access nor modify the identifiers belonging to the imported packages of its imported packages.
 Every statement contained in an imported package is evaluated.
 
+### Attributes
+
+Attributes define a set of properties on source code elements.
+
+    Attributes             = { Attribute } .
+    Attribute              = "@" identifier AttributeParameters .
+    AttributeParameters    = "(" [ AttributeParameterList [ "," ] ] ")" .
+    AttributeParameterList = AttributeParameter { "," AttributeParameter } .
+    AttributeParameter     = PrimaryExpression
+
+The full set of defined attributes and their meaning is left to the runtime to specify.
+
+Example
+
+    @edition("2022.1")
+    package main
+
+
+### Statements
+
+A statement controls execution.
+
+    Statement      = [ Attributes ] StatementInner .
+    StatementInner = OptionAssignment
+                   | BuiltinStatement
+                   | VariableAssignment
+                   | ReturnStatement
+                   | ExpressionStatement
+                   | TestcaseStatement .
+
+
 #### Return statements
 
 A terminating statement prevents execution of all statements that appear after it in the same block.
@@ -1104,6 +1126,41 @@ Examples:
     1 + 1
     f()
     a
+
+#### Testcase statements
+
+>NOTE: Testcase statements only work within the context of a Flux developement environment. We expect to expand their use in the future.
+
+A statement that defines a test case.
+
+    TestcaseStatement = "testcase" identifier [ TestcaseExtention ] Block .
+    TestcaseExtention = "extends" string_lit
+
+Test cases are defined as a set of statements with special scoping rules.
+Each test case statement in a file is considered to be its own main package.
+In effect all statements in package scope and all statements contained within the test case statment are flattened into a single main package and executed.
+Use the `testing` package from the standard library to control the pass failure of the test case.
+
+Test extention augments an existing test case with more statements or attributes.
+A special function call `super()` must be made inside the body of a test case extention, in its place all statements from the parent test case will be executed.
+
+
+Examples:
+
+A basic test case for addition
+
+    import "testing"
+
+    testcase addition {
+        testing.assertEqualValues(got: 1 + 1, want: 2)
+    }
+
+An example of test case extention to validate a feature does not regress existing behavior.
+
+    @feature({vectorization: true})
+    testcase vector_addition extends "basics_test.addition" {
+        super()
+    }
 
 ### Side Effects
 
@@ -1354,6 +1411,12 @@ So, you have to:
 
 Flux provides a standard library of functions. Find documentation here https://docs.influxdata.com/flux/latest/stdlib/
 
+#### Experimental namespace
+
+Within the standard library there is an `experimental` package namespace.
+Packages within this namesapce are subject to breaking changes without notice.
+See the package documentation for more details https://docs.influxdata.com/flux/latest/stdlib/experimental/
+
 ### Composite data types
 
 A composite data type is a collection of primitive data types that together have a higher meaning.
@@ -1363,6 +1426,255 @@ A composite data type is a collection of primitive data types that together have
 A query specification defines what data and operations to perform.
 The execution model reserves the right to perform those operations as efficiently as possible.
 The execution model may rewrite the query in anyway it sees fit while maintaining correctness.
+
+## Modules
+
+>NOTE: Modules are not fully implemented yet, follow https://github.com/influxdata/flux/issues/4296 for details.
+
+A module is a collection of packages that can be imported.
+A module has a module path, version and a collection of packages with their source code.
+
+### Module path
+
+The module path is the import path of the top level package within the module.
+Additionally major versions of a module of two or greater must add a final element to the path of the form `v#` where `#` is the major version number.
+For modules at version zero or one the path must not contain the major version as it is not necessary.
+A change from `v0` to `v1` may include a breaking change but once `v1` is published any future breaking changes will be a new major version.
+
+Example
+
+    foo/bar    // module path of foo/bar for version zero or one
+    foo/bar/v2 // module path of foo/bar for major version two
+
+### Module versions
+
+All modules are versioned using a [semantic version number](https://semver.org/) prefixed with a `v`, i.e. `vMAJOR.MINOR.PATCH`.
+Once a module version has been published it cannot be modified.
+A new version of the module must be published.
+
+### Module registry
+
+A modules is hosted and stored on a registry.
+A module path is unique to the registry that hosts the module.
+Module paths need not be unique across different registries.
+
+#### Registry attribute
+
+The `registry` attribute defines the available registries and must precede a package clause.
+The registry attribute expects two arguments, the first is the name of the registry and the second is the `$base` URL of the registry API endpoint.
+See the [Registry API](#registry-api) for more details.
+
+The runtime may define default registries, a registry attribute will override any default registry.
+The standard library will never contain a top level package named `modules` or any name containing a `.`.
+This makes it possible for the runtime to use `modules` or any name containing a `.` (i.e. a DNS name) as a default registry name.
+
+Example:
+
+    @registry("modules", "http://localhost/modules")
+    @registry("example.com", "https://example.com/api/modules")
+    package main
+
+### Importing modules
+
+Flux modules are imported using an import declaration.
+The import path may contain specifiers about which registry and which versions of a module should be imported.
+
+An import path follows this grammar:
+
+    ImportPath       = ModulePath [ "/" PackagePath ] [ Version ] .
+    ModulePath       = RegistryName [ "/" ModuleName ] [ MajorVersion ] .
+    RegistryName     = PathElement
+    ModuleName       = PathElement
+    MajorVersion     = "/v" int_lit .
+    PackagePath      = PathElement { "/" PathElement } .
+    Version          = PreVersion | MinVersion
+    PreVersion       = "@pre"
+    MinVersion       = "@v" int_lit "." int_lit "." int_lit "." .
+    PathElement      = ascii_letter { ascii_letter } .
+    ascii_letter     = /* alpha numeric and underscore ASCII characters */
+
+Per the grammar a module path may have up to three path elements:
+
+* Registry name
+* Module name
+* Module major version
+
+A package path may have an arbitrary depth and must not begin with a major version.
+
+When resolving an import path the first path element of the module path is compared against the defined registry names.
+If a match is found the import path is understood to be relative to the registry.
+If no match is found the import path is understood to be an import from the standard library.
+It is an error to specify a version on imports from the standard library.
+The standard library version is implicit to the runtime.
+
+When no version information is provided the latest version of the module is used.
+A _minimum_ version may be specified.
+An import may also specify the version `pre` which is the most recent pre-release version of the module.
+
+
+Examples
+
+The following examples use default registry of `modules`.
+
+    import "foo"                         // imports package `foo` from the standard library
+    import "modules/foo"                 // imports the latest version 0.x or 1.x version of the `foo` module from the `modules` registry
+    import "modules/foo/a/b/c"           // imports package a/b/c from the latest 0.x or 1.x version
+    import "modules/foo@v1.5.6"          // imports at least version 1.5.6
+    import "modules/foo/v2"              // imports the latest 2.x version
+    import "modules/foo/v2/a"            // imports package `a` from the latest 2.x version
+    import "modules/foo/v2/a@v2.3.0"     // imports package `a` from at least version 2.3.0 of the `foo` module
+    import "modules/foo/v2/a/b/c"        // imports package `a/b/c` from the latest 2.x version
+    import "modules/foo/v2/a/b/c@v2.3.0" // imports package `a/b/c` from at least version 2.3.0
+    import "modules/foo/a/b/c@pre"       // imports package `a/b/c` from the latest pre-release 0.x or 1.x version
+    import "modules/foo@pre"             // imports the latest pre-release 0.x or 1.x version
+    import "modules/foo/v2@pre"          // imports the latest pre-release 2.x version
+
+### Version resolution
+
+When multiple modules both depend on a specific version of another module the maximum version of the minimum versions is used.
+Major versions of a module are considered different modules (they have different module paths), therefore multiple major versions of a module may be imported into the same Flux script.
+
+When multiple import declarations exist for the same module at most one import declaration must specify version information.
+
+Example
+
+```
+// a.flux
+package a
+
+import "foo@v1.1.0"
+```
+
+```
+// b.flux
+package b
+
+import "foo@v1.2.0"
+```
+
+```
+// main.flux
+@registry("modules", "http://localhost/modules")
+package main
+
+import "modules/a"
+import "modules/b"
+```
+
+Package `main` depends on module `foo` via both of the modules `a` and `b`.
+However `a` and `b` specify different versions of `foo`.
+The possible versions of `foo` include `1.1.0` and `1.2.0`.
+Flux will pick the maximum version of these possible versions, so version `1.2.0` of `foo` is used.
+This is sound because module `a` has specified that it needs at least version `1.1.0` of `foo` and that constraint is satisfied.
+
+### Registry API
+
+Modules can be published and downloaded over an HTTP API from a registry.
+Modules are immutable, once a version is published it cannot be modified, a new version must be published instead.
+
+The HTTP API will have the routes listed in the following table where `$base` is the anchor point of the API, `$module` is a module path without the registry name, and `$version` is a semantic version of the form `vMAJOR.MINOR.PATCH`.
+
+| Method | Path                          | Description                                                                                                                                                |
+| ------ | ----                          | -----------                                                                                                                                                |
+| GET    | $base/$module/@v/list         | Returns a list of known versions of the given module in plain text, one per line.                                                                          |
+| GET    | $base/$module/@v/$version.zip | Returns a zip file of the contents of the module at a specific version.                                                                                    |
+| GET    | $base/$module/@latest         | Returns the highest released version, or if no released versions exist the highest pre-release version of the given module in plain text on a single line. |
+| GET    | $base/$module/@pre            | Returns the highest pre-released version of the given module in plain text on a single line.                                                               |
+| POST   | $base/$module/@v/$version     | Publish a new version of the module where the POST body contains multipart formdata for the contents of the module.                                        |
+
+The POST endpoint expects the module's contents to be encoded using multipart form data as defined in [RFC 2046](https://rfc-editor.org/rfc/rfc2046.html).
+Each file within the module must be uploaded using `module` as the file key and the relative path to the module root as the filename.
+The filename must end in `.flux` and must follow the rules of import paths for allowed characters.
+A maximum POST body size of 10MB will be read, any larger body will result in an error.
+
+As an example, to download the zip file for a module `foo` at version `v0.5.6`, for an API endpoint anchored at `https://example.com/flux/modules/` use this URL `https://example.com/flux/modules/foo/@v/v1.5.6.zip`.
+Or for the module `foo/v2` at version `v2.3.4` the URL is `https://example.com/flux/modules/foo/v2/@v/v2.3.4.zip`.
+
+Examples
+
+The following examples use a $base of `/flux/modules/`
+
+    GET /flux/modules/foo/@v/list          # Return a list of versions for the module foo
+    GET /flux/modules/bar/@v/v1.3.4.zip    # Return a zip file of the bar module at version 1.3.4
+    GET /flux/modules/bar/v2/@v/v2.3.4.zip # Return a zip file of the bar module at version 2.3.4
+    GET /flux/modules/bar/@latest          # Return the latest 0.x or 1.x version of bar
+    GET /flux/modules/bar/@pre             # Return the latest  0.x or 1.x pre-release version of bar
+    GET /flux/modules/bar/v2/@latest       # Return the latest 2.x release version of bar
+    GET /flux/modules/bar/v2/@pre          # Return the latest 2.x pre-release version of bar
+
+
+## Versions and editions
+
+Flux follows a [semantic versioning scheme](https://semver.org/) such that breaking changes are clearly communicated as part of the version information.
+*Editions* allow for the introduction of breaking changes via an opt-in mechanism.
+
+Flux editions are a set of features that are enabled in Flux.
+If the edition is not enabled then the features are not enabled.
+These features would otherwise be breaking changes to Flux.
+An edition is explicitly opt-in.
+The pattern of editions allows users to migrate to new Flux versions without risk that their scripts will break.
+
+An edition is separate from a version.
+A version of Flux represents a single point in the commit history of the Flux source code.
+A user can only use a single version of Flux for a given script.
+Editions represent a set of features that are enabled for a given Flux version.
+So long as the Flux version supports all the features of the edition it can be enabled.
+A user can upgrade to a newer Flux version without being required to upgrade to the newest edition of Flux.
+
+New Flux features that require a breaking change to the syntax or semantics of Flux must always be part of a new edition.
+This means that a script can regularly update to the newest Flux version without risk of breaking because any breaking changes are explicitly opt-in.
+With editions the Flux community gets both a pattern where users can always be running the latest version of Flux and the ability to introduce new useful but otherwise breaking changes to Flux.
+
+We anticipate that there will be at most one new editions of Flux a year. A slow cadence of new editions means users have ample time to migrate to a new edition if desired.
+Even being a few years behind on editions should only mean a few migration steps in order to have access to features introduced in the newest edition.
+
+### First Edition
+
+The first edition of Flux is 2022.1.
+This first edition is the only minimum required edition of Flux.
+
+### Future Editions
+
+Editions will be named after the year in which they are created, with an added sequence number if more than one edition needs to be created in a single year.
+For example the first edition is `2022.1` because it is created in the year `2022` and is the first edition created in that year.
+
+### Editions are optional
+
+A Flux script may specify directly the edition it requires to function.
+Additionally the Flux runtime will allow for the edition to be specified out of band of the script, thus allowing for deployments of Flux to have control over the edition.
+
+#### Edition attribute
+
+The edition of the current script is specified as an `edition` attribute on the package with a single parameter, the name of the edition.
+It is an error for multiple files within a package or module to specify differing editions.
+
+Examples:
+
+Specify the edition with an explicit package clause
+
+    @edition("2022.1")
+    package math
+
+    add = (x,y) => x + y
+
+
+### Flux Editions and Modules
+
+Each Flux module may specify its own edition, therefore a Flux script on an earlier edition may import and consume a module that uses a newer edition of Flux.
+Naturally if a module exposes a new edition feature via its API, consumers of that module will be required to use at least that edition in order to directly consume the module.
+
+
+### Migrating to a new edition
+
+When a new edition is created a migration process will be provided to ease the migration from an older edition to a new edition.
+
+### Editions and Experimental
+
+Editions do not change the contract of the experimental package namespace.
+Experimental packages are still subject to breaking changes without notice.
+Most new features do not require a breaking change to Flux syntax or semantics.
+As such it will remain common for new packages to be introduced as experimental packages.
+When an API is stabilized, it can be promoted out of experimental without the need to create a new edition.
 
 ## Request and Response Formats
 
